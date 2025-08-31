@@ -31,24 +31,24 @@ jobs:
           results-artifact-name: salesforce-code-analyzer-results
           github-token: ${{ github.token }}
 
-      #Extract branch name after last "/"
-      - name: Extract short branch name
-        id: branch
-        run: echo "SHORT_BRANCH_NAME=${GITHUB_HEAD_REF##*/}" >> $GITHUB_ENV
+      #Sanitize branch name
+      - name: Sanitize branch name
+        run: echo "SAFE_BRANCH=${GITHUB_REF_NAME//\//-}" >> $GITHUB_ENV
+
         
       - name: Upload Analyzer Report Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: code-analyzer-report-${{ github.head_ref }}
-          path: sfca_results.html
+          name: code-analyzer-report-${{ env.SAFE_BRANCH }}
+          path: ./path/to/report/file.txt
 
       - name: Comment Report Link on PR
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: Code Analyzer Report
           message: |
-            ✅ Salesforce Code Analyzer finished.
-            📄 [Here is the Code Analyzer Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts)
+            Salesforce Code Analyzer finished.
+            [Here is the Code Analyzer Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts)
 
       # sev1- Critical Severity, sev2 - High, sev3 - Medium, sev4 - Low, sev5 - Info
       - name: Check the Outputs to Determine Whether to Fail
