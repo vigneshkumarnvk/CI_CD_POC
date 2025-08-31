@@ -1,6 +1,9 @@
 name: Salesforce Code Analyzer Workflow
 on:
   pull_request:
+    types: [opened, synchronize, reopened] # run only on these PR events
+    branches:
+      - dev # only when PR is raised against dev branch
 jobs:
   salesforce-code-analyzer-workflow:
     permissions:
