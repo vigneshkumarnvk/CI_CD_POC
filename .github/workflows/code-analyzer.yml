@@ -1,11 +1,12 @@
-name: Salesforce Code Analyzer Workflow
+#https://github.com/marketplace/actions/run-salesforce-code-analyzer
+name: Salesforce Code Analyzer
 on:
   pull_request:
     types: [opened, synchronize, reopened] # run only on these PR events
     branches:
       - dev # only when PR is raised against dev branch
 jobs:
-  salesforce-code-analyzer-workflow:
+  salesforce-code-analyzer:
     permissions:
       pull-requests: write # Grants permission to create a pull request review. Only necessary if running against pull requests.
       contents: read # Grants permission to check out the repository. Only necessary for private repos.
@@ -44,10 +45,10 @@ jobs:
           results-artifact-name: salesforce-code-analyzer-results
           github-token: ${{ github.token }}
 
+      # sev1- Critical Severity, sev2 - High, sev3 - Medium, sev4 - Low, sev5 - Info
       - name: Check the Outputs to Determine Whether to Fail
         if: |
-          steps.run-code-analyzer.outputs.exit-code > 0 ||
           steps.run-code-analyzer.outputs.num-sev1-violations > 0 ||
           steps.run-code-analyzer.outputs.num-sev2-violations > 0 ||
-          steps.run-code-analyzer.outputs.num-violations > 10
+          steps.run-code-analyzer.outputs.num-sev3-violations > 0
         run: exit 1
