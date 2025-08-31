@@ -31,10 +31,10 @@ jobs:
           results-artifact-name: salesforce-code-analyzer-results
           github-token: ${{ github.token }}
 
-      #Fix: sanitize branch name (replace "/" with "-")
-      - name: Sanitize Branch Name
-        id: sanitize-branch
-        run: echo "BRANCH_NAME=${GITHUB_HEAD_REF//\//-}" >> $GITHUB_ENV
+      #Extract branch name after last "/"
+      - name: Extract short branch name
+        id: branch
+        run: echo "SHORT_BRANCH_NAME=${GITHUB_HEAD_REF##*/}" >> $GITHUB_ENV
         
       - name: Upload Analyzer Report Artifact
         uses: actions/upload-artifact@v4
