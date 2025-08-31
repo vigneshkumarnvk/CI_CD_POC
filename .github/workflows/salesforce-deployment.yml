@@ -30,16 +30,11 @@ jobs:
           run-arguments: --workspace . --view detail --output-file sfca_results.html --output-file sfca_results.json
           results-artifact-name: salesforce-code-analyzer-results
           github-token: ${{ github.token }}
-
-      #Fix: sanitize branch name (replace "/" with "-")
-      - name: Sanitize Branch Name
-        id: sanitize-branch
-        run: echo "BRANCH_NAME=${GITHUB_HEAD_REF//\//-}" >> $GITHUB_ENV
         
       - name: Upload Analyzer Report Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: code-analyzer-report-${{ github.head_ref }}
+          name: code-analyzer-report
           path: sfca_results.html
 
       - name: Comment Report Link on PR
