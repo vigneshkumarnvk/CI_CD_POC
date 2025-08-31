@@ -6,9 +6,8 @@ on:
       - dev
 
 permissions:
-  contents: write   # allow creating commit comments
+  contents: write   # required for commit comments
 
-# Environment variables
 env:
   SF_USE_GENERIC_UNIX_KEYCHAIN: true
 
@@ -21,6 +20,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Always install Salesforce CLI
+      - name: Install Salesforce CLI
+        run: npm install -g @salesforce/cli@latest
+
       # Download last successful commit artifact
       - name: Download last successful commit
         uses: actions/download-artifact@v4
@@ -29,16 +32,21 @@ jobs:
           name: last-successful-commit
           path: ./
 
+      # Get last successful commit SHA or fallback to empty tree (first deploy)
       - name: Get last successful commit SHA
         id: last-commit
         run: |
           if [ -f last_successful_commit.txt ]; then
             LAST_COMMIT=$(cat last_successful_commit.txt)
+            echo "Using last successful commit: $LAST_COMMIT"
           else
-            LAST_COMMIT=$(git rev-list --max-parents=0 HEAD)
+            # First run → use empty tree so all files are considered "changed"
+            LAST_COMMIT=$(git hash-object -t tree /dev/null)
+            echo "First deployment detected. Using empty tree: $LAST_COMMIT"
           fi
           echo "last_commit=$LAST_COMMIT" >> $GITHUB_OUTPUT
 
+      # Detect delta changes
       - name: Get changed files since last successful deploy
         id: delta
         run: |
@@ -53,7 +61,7 @@ jobs:
         if: steps.delta.outputs.has_changes == 'false'
         run: echo "No delta changes detected. Skipping deployment."
 
-      # Deploy only if there are changes
+      # Authenticate to Salesforce
       - name: Authenticate to Salesforce
         if: steps.delta.outputs.has_changes == 'true'
         run: |
@@ -67,6 +75,7 @@ jobs:
             --alias target-org \
             --set-default
 
+      # Deploy to Salesforce
       - name: Deploy to Salesforce
         if: steps.delta.outputs.has_changes == 'true'
         id: deploy
@@ -77,6 +86,7 @@ jobs:
             --wait 30 \
             --target-org target-org
 
+      # Save commit SHA only if deploy succeeded
       - name: Save commit SHA
         if: steps.deploy.outcome == 'success'
         run: echo "${GITHUB_SHA}" > last_successful_commit.txt
@@ -88,7 +98,7 @@ jobs:
           name: last-successful-commit
           path: last_successful_commit.txt
 
-      # Post PR/commit comment
+      # Add commit/PR comment with status
       - name: Add deployment comment
         if: always()
         uses: actions/github-script@v7
