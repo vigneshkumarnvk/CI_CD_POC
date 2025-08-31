@@ -1,12 +1,12 @@
 #https://github.com/marketplace/actions/run-salesforce-code-analyzer
-name: Salesforce Code Analyzer Workflow
+name: Salesforce Code Analyzer
 on:
   pull_request:
     types: [opened, synchronize, reopened] # run only on these PR events
     branches:
       - dev # only when PR is raised against dev branch
 jobs:
-  salesforce-code-analyzer-workflow:
+  salesforce-code-analyzer:
     permissions:
       pull-requests: write # Grants permission to create a pull request review. Only necessary if running against pull requests.
       contents: read # Grants permission to check out the repository. Only necessary for private repos.

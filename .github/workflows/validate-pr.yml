@@ -1,0 +1,84 @@
+name: Salesforce PR Validation
+
+on:
+  workflow_run:
+    workflows: ["Salesforce Code Analyzer"]
+    types:
+      - completed
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened] # run only on these PR events
+    paths:
+      - 'force-app/**'
+
+# Environment variables
+env:
+  SF_USE_GENERIC_UNIX_KEYCHAIN: true
+
+jobs:
+  validate-deployment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # PREREQUISITES - Only needed if the runner doesn't already satisfy these requirements.
+      - name: Ensure node v20.9.0 or greater
+        uses: actions/setup-node@v4
+        with:
+          node-version: '>=20.9.0'
+
+      - name: Ensure java v11 or greater
+        uses: actions/setup-java@v4
+        with:
+          java-version: '>=11'
+          distribution: 'zulu'
+
+      - name: Ensure python v3.10 or greater
+        uses: actions/setup-python@v5
+        with:
+          python-version: '>=3.10'
+
+      # Install Salesforce CLI
+      - name: Install Salesforce CLI
+        run: npm install -g @salesforce/cli@latest
+
+      # Create JWT key file from secret
+      - name: Create JWT Key File
+        run: |
+          echo "${{ secrets.SF_JWT_KEY }}" > jwt-key.txt
+          chmod 600 jwt-key.txt
+
+      # Authenticate to Salesforce using JWT
+      - name: Authenticate to Salesforce
+        run: |
+          sf org login jwt \
+            --client-id ${{ secrets.SF_CLIENT_ID }} \
+            --jwt-key-file jwt-key.txt \
+            --username ${{ secrets.SF_USERNAME }} \
+            --instance-url ${{ secrets.SF_INSTANCE_URL }} \
+            --alias target-org \
+            --set-default
+
+      # Verify authentication
+      - name: Verify Authentication
+        run: |
+          sf org display --target-org target-org
+
+      # Validate Deployment with specified tests
+      - name: Validate Deployment with Specified Tests
+        run: |
+          echo "Reading test classes from TestClass.txt..."
+          TESTS=$(cat RunTest.txt | tr '\n' ',' | sed 's/,$//')
+
+          echo "Running validation with tests: $TESTS"
+
+          sf project deploy validate \
+            -d force-app/ \
+            --test-level RunSpecifiedTests \
+            --tests "$TESTS" \
+            --wait 10 \
+            --target-org target-org
