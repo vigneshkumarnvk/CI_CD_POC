@@ -3,20 +3,17 @@ name: Salesforce PR Validation
 on:
   workflow_run:
     workflows: ["Salesforce Code Analyzer"]
-    types:
-      - completed
-  pull_request:
-    types: [opened, synchronize, reopened] # run only on these PR events
-    paths:
-      - 'force-app/**'
+    types: [completed]
 
 # Environment variables
 env:
   SF_USE_GENERIC_UNIX_KEYCHAIN: true
 
 jobs:
-  validate-deployment:
-    if: startsWith(github.head_ref, 'feature/') # run only for feature branches
+  validate-deployment: # run only for feature branches and on success of code analyzer
+    if: >
+      startsWith(github.event.workflow_run.head_branch, 'feature/') &&
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Check out source code
