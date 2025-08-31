@@ -5,6 +5,9 @@ on:
     branches:
       - dev
 
+permissions:
+  contents: write   # allow creating commit comments
+
 # Environment variables
 env:
   SF_USE_GENERIC_UNIX_KEYCHAIN: true
