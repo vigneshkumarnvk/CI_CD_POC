@@ -17,20 +17,6 @@ jobs:
         uses: actions/checkout@v4
 
       # PREREQUISITES - Only needed if the runner doesn't already satisfy these requirements.
-      - name: Ensure node v20.9.0 or greater
-        uses: actions/setup-node@v4
-        with:
-          node-version: '>=20.9.0'
-      - name: Ensure java v11 or greater
-        uses: actions/setup-java@v4
-        with:
-          java-version: '>=11'
-          distribution: 'zulu'
-      - name: Ensure python v3.10 or greater
-        uses: actions/setup-python@v5
-        with:
-          python-version: '>=3.10'
-
       - name: Install Salesforce CLI
         run: npm install -g @salesforce/cli@latest
 
@@ -45,19 +31,24 @@ jobs:
           results-artifact-name: salesforce-code-analyzer-results
           github-token: ${{ github.token }}
 
+      #Sanitize branch name
+      - name: Sanitize branch name
+        run: echo "SAFE_BRANCH=${GITHUB_REF_NAME//\//-}" >> $GITHUB_ENV
+
+        
       - name: Upload Analyzer Report Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: code-analyzer-report-${{ github.head_ref }}
-          path: sfca_results.html
+          name: code-analyzer-report-${{ env.SAFE_BRANCH }}
+          path: ./path/to/report/file.txt
 
       - name: Comment Report Link on PR
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: Code Analyzer Report
           message: |
-            ✅ Salesforce Code Analyzer finished.
-            📄 [Here is the Code Analyzer Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts)
+            Salesforce Code Analyzer finished.
+            [Here is the Code Analyzer Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts)
 
       # sev1- Critical Severity, sev2 - High, sev3 - Medium, sev4 - Low, sev5 - Info
       - name: Check the Outputs to Determine Whether to Fail
