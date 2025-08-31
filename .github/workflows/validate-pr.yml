@@ -67,6 +67,10 @@ jobs:
       - name: Verify Authentication
         run: |
           sf org display --target-org target-org
+      #Change Repo Root    
+      - name: Change to repo root
+        run: |
+          cd $GITHUB_WORKSPACE
 
       # Validate Deployment with specified tests
       - name: Validate Deployment with Specified Tests
@@ -77,7 +81,7 @@ jobs:
           echo "Running validation with tests: $TESTS"
 
           sf project deploy validate \
-            --source-dir force-app \
+            --source-dir force-app/ \
             --test-level RunSpecifiedTests \
             --tests "$TESTS" \
             --wait 10 \
