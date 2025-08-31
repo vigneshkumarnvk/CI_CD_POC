@@ -6,8 +6,6 @@ on:
     types:
       - completed
   pull_request:
-    branches:
-      - main
     types: [opened, synchronize, reopened] # run only on these PR events
     paths:
       - 'force-app/**'
@@ -18,6 +16,7 @@ env:
 
 jobs:
   validate-deployment:
+    if: startsWith(github.head_ref, 'feature/') # run only for feature branches
     runs-on: ubuntu-latest
     steps:
       - name: Check out source code
@@ -26,22 +25,6 @@ jobs:
           fetch-depth: 0
 
       # PREREQUISITES - Only needed if the runner doesn't already satisfy these requirements.
-      - name: Ensure node v20.9.0 or greater
-        uses: actions/setup-node@v4
-        with:
-          node-version: '>=20.9.0'
-
-      - name: Ensure java v11 or greater
-        uses: actions/setup-java@v4
-        with:
-          java-version: '>=11'
-          distribution: 'zulu'
-
-      - name: Ensure python v3.10 or greater
-        uses: actions/setup-python@v5
-        with:
-          python-version: '>=3.10'
-
       # Install Salesforce CLI
       - name: Install Salesforce CLI
         run: npm install -g @salesforce/cli@latest
