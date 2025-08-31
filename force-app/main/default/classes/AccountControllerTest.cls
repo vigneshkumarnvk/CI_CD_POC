@@ -11,7 +11,7 @@ public class AccountControllerTest {
         List<Account> accounts = AccountController.getAccounts();
         Test.stopTest();
 
-        // Assert result is not empty
+        // Assert result is not emptys
         System.assertNotEquals(0, accounts.size(), 'Accounts list should not be empty');
         System.assertEquals(acc.Id, accounts[0].Id, 'The queried account should match the inserted one');
     }
