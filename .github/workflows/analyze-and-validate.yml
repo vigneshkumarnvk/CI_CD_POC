@@ -14,8 +14,10 @@ jobs:
   # Step 1: Run Code Analyzer
   code-analyzer:
     runs-on: ubuntu-latest
-    outputs:
-      analyzer-report-url: ${{ steps.comment-pr.outputs.report-url }}
+    permissions:
+      pull-requests: write
+      contents: read
+      actions: read
     steps:
       - name: Check out files
         uses: actions/checkout@v4
@@ -40,10 +42,13 @@ jobs:
           name: code-analyzer-report
           path: sfca_results.html
 
-      - name: Prepare Report URL
-        id: comment-pr
-        run: |
-          echo "report-url=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" >> $GITHUB_OUTPUT
+      - name: Comment Report Link on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: Code Analyzer Report
+          message: |
+            Salesforce Code Analyzer finished.
+            [View Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts)
 
       - name: Fail if High Severity Violations
         if: |
@@ -57,8 +62,8 @@ jobs:
     needs: code-analyzer # Run only if analyzer succeeds
     if: startsWith(github.head_ref, 'feature/')
     runs-on: ubuntu-latest
-    outputs:
-      validate-status: ${{ steps.validate.outputs.status }}
+    permissions:
+      pull-requests: write
     steps:
       - name: Check out source code
         uses: actions/checkout@v4
@@ -106,21 +111,10 @@ jobs:
               exit 1
           fi
 
-  # Step 3: Single PR Comment
-  pr-comment:
-    needs: [code-analyzer, validate-deployment]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Post Combined Comment
+      - name: Comment Deployment Result on PR
+        if: always()
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          header: "Salesforce PR Validation"
+          header: Deployment Validation
           message: |
-            **Salesforce Code Analyzer finished**  
-            [View Analyzer Report](${{ needs.code-analyzer.outputs.analyzer-report-url }})
-
-            **Deployment Validation**  
-            Status: **${{ needs.validate-deployment.outputs.validate-status }}**
-
-            ${{ needs.validate-deployment.outputs.validate-status == 'failure' && format(' [View Failure Logs](https://github.com/{0}/actions/runs/{1})', github.repository, github.run_id) || '' }}
+            Salesforce Deployment Validation finished with status: **${{ steps.validate.outputs.status }}**
