@@ -77,7 +77,7 @@ jobs:
           echo "Running validation with tests: $TESTS"
 
           sf project deploy validate \
-            -d force-app/ \
+            --source-dir force-app \
             --test-level RunSpecifiedTests \
             --tests "$TESTS" \
             --wait 10 \
