@@ -1,0 +1,120 @@
+#https://github.com/marketplace/actions/run-salesforce-code-analyzer
+name: Salesforce PR Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - dev # only when PR is raised against dev branch
+
+env:
+  SF_USE_GENERIC_UNIX_KEYCHAIN: true
+
+jobs:
+  # Step 1: Run Code Analyzer
+  code-analyzer:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+      actions: read
+    steps:
+      - name: Check out files
+        uses: actions/checkout@v4
+
+      - name: Install Salesforce CLI
+        run: npm install -g @salesforce/cli@latest
+
+      - name: Install Latest Salesforce Code Analyzer CLI Plugin
+        run: sf plugins install code-analyzer@latest
+
+      - name: Run Salesforce Code Analyzer
+        id: run-code-analyzer
+        uses: forcedotcom/run-code-analyzer@v2
+        with:
+          run-arguments: --workspace . --view detail --output-file sfca_results.html --output-file sfca_results.json
+          results-artifact-name: salesforce-code-analyzer-results
+          github-token: ${{ github.token }}
+
+      - name: Upload Analyzer Report Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-analyzer-report
+          path: sfca_results.html
+
+      - name: Comment Report Link on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: Code Analyzer Report
+          message: |
+            Salesforce Code Analyzer finished.
+            [View Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts)
+
+      - name: Fail if High Severity Violations
+        if: |
+          steps.run-code-analyzer.outputs.num-sev1-violations > 0 ||
+          steps.run-code-analyzer.outputs.num-sev2-violations > 0 ||
+          steps.run-code-analyzer.outputs.num-sev3-violations > 0
+        run: exit 1
+
+  # Step 2: Validate Deployment
+  validate-deployment:
+    needs: code-analyzer # Run only if analyzer succeeds
+    if: startsWith(github.head_ref, 'feature/')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Salesforce CLI
+        run: npm install -g @salesforce/cli@latest
+
+      - name: Create JWT Key File
+        run: |
+          echo "${{ secrets.SF_JWT_KEY }}" > jwt-key.txt
+          chmod 600 jwt-key.txt
+
+      - name: Authenticate to Salesforce
+        run: |
+          sf org login jwt \
+            --client-id ${{ secrets.SF_CLIENT_ID }} \
+            --jwt-key-file jwt-key.txt \
+            --username ${{ secrets.SF_USERNAME }} \
+            --instance-url ${{ secrets.SF_INSTANCE_URL }} \
+            --alias target-org \
+            --set-default
+
+      - name: Verify Authentication
+        run: sf org display --target-org target-org
+
+      - name: Validate Deployment with Specified Tests
+        id: validate
+        run: |
+          echo "Reading test classes from RunTest.txt..."
+          TESTS=$(cat RunTest.txt | tr '\n' ',' | sed 's/,$//')
+
+          echo "Running validation with tests: $TESTS"
+
+          if sf project deploy validate \
+            --source-dir force-app/ \
+            --test-level RunSpecifiedTests \
+            --tests "$TESTS" \
+            --wait 10 \
+            --target-org target-org; then
+              echo "status=success" >> $GITHUB_OUTPUT
+          else
+              echo "status=failure" >> $GITHUB_OUTPUT
+              exit 1
+          fi
+
+      - name: Comment Deployment Result on PR
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: Deployment Validation
+          message: |
+            Salesforce Deployment Validation finished with status: **${{ steps.validate.outputs.status }}**
