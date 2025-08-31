@@ -1,120 +1,59 @@
-name: Salesforce Deployment
-
+#https://github.com/marketplace/actions/run-salesforce-code-analyzer
+name: Salesforce Code Analyzer
 on:
-  push:
+  pull_request:
+    types: [opened, synchronize, reopened] # run only on these PR events
     branches:
-      - dev
-
-# Environment variables
-env:
-  SF_USE_GENERIC_UNIX_KEYCHAIN: true
-
+      - dev # only when PR is raised against dev branch
 jobs:
-  deploy:
+  salesforce-code-analyzer:
+    permissions:
+      pull-requests: write # Grants permission to create a pull request review. Only necessary if running against pull requests.
+      contents: read # Grants permission to check out the repository. Only necessary for private repos.
+      actions: read # Grants permission to read the in-progress actions. Only necessary for private repos.
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Check out files
         uses: actions/checkout@v4
+
+      # PREREQUISITES - Only needed if the runner doesn't already satisfy these requirements.
+      - name: Install Salesforce CLI
+        run: npm install -g @salesforce/cli@latest
+
+      - name: Install Latest Salesforce Code Analyzer CLI Plugin
+        run: sf plugins install code-analyzer@latest
+
+      - name: Run Salesforce Code Analyzer
+        id: run-code-analyzer
+        uses: forcedotcom/run-code-analyzer@v2
         with:
-          fetch-depth: 0
+          run-arguments: --workspace . --view detail --output-file sfca_results.html --output-file sfca_results.json
+          results-artifact-name: salesforce-code-analyzer-results
+          github-token: ${{ github.token }}
 
-      # Download last successful commit artifact
-      - name: Download last successful commit
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: last-successful-commit
-          path: ./
-
-      - name: Get last successful commit SHA
-        id: last-commit
-        run: |
-          if [ -f last_successful_commit.txt ]; then
-            LAST_COMMIT=$(cat last_successful_commit.txt)
-          else
-            LAST_COMMIT=$(git rev-list --max-parents=0 HEAD)
-          fi
-          echo "last_commit=$LAST_COMMIT" >> $GITHUB_OUTPUT
-
-      - name: Get changed files since last successful deploy
-        id: delta
-        run: |
-          git diff --name-only ${{ steps.last-commit.outputs.last_commit }} HEAD > changed_files.txt
-          if [ -s changed_files.txt ]; then
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: No Delta Found
-        if: steps.delta.outputs.has_changes == 'false'
-        run: echo "No delta changes detected. Skipping deployment."
-
-      # Deploy only if there are changes
-      - name: Authenticate to Salesforce
-        if: steps.delta.outputs.has_changes == 'true'
-        run: |
-          echo "${{ secrets.SF_JWT_KEY }}" > jwt-key.txt
-          chmod 600 jwt-key.txt
-          sf org login jwt \
-            --client-id ${{ secrets.SF_CLIENT_ID }} \
-            --jwt-key-file jwt-key.txt \
-            --username ${{ secrets.SF_USERNAME }} \
-            --instance-url ${{ secrets.SF_INSTANCE_URL }} \
-            --alias target-org \
-            --set-default
-
-      - name: Deploy to Salesforce
-        if: steps.delta.outputs.has_changes == 'true'
-        id: deploy
-        run: |
-          sf project deploy start \
-            --source-dir force-app/ \
-            --test-level RunLocalTests \
-            --wait 30 \
-            --target-org target-org
-
-      - name: Save commit SHA
-        if: steps.deploy.outcome == 'success'
-        run: echo "${GITHUB_SHA}" > last_successful_commit.txt
-
-      - name: Upload new commit SHA
-        if: steps.deploy.outcome == 'success'
+      #Fix: sanitize branch name (replace "/" with "-")
+      - name: Sanitize Branch Name
+        id: sanitize-branch
+        run: echo "BRANCH_NAME=${GITHUB_HEAD_REF//\//-}" >> $GITHUB_ENV
+        
+      - name: Upload Analyzer Report Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: last-successful-commit
-          path: last_successful_commit.txt
+          name: code-analyzer-report-${{ github.head_ref }}
+          path: sfca_results.html
 
-      # Post PR/commit comment
-      - name: Add deployment comment
-        if: always()
-        uses: actions/github-script@v7
+      - name: Comment Report Link on PR
+        uses: marocchino/sticky-pull-request-comment@v2
         with:
-          github-token: ${{ github.token }}
-          script: |
-            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            let body = "";
+          header: Code Analyzer Report
+          message: |
+            Salesforce Code Analyzer finished.
+            [Here is the Code Analyzer Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts)
 
-            if ("${{ steps.delta.outputs.has_changes }}" === "false") {
-              body = `No delta changes detected. Skipping deployment. [Workflow Run](${runUrl})`;
-            } else if ("${{ steps.deploy.outcome }}" === "success") {
-              body = `Deployment succeeded for commit \`${context.sha}\`. [Workflow Run](${runUrl})`;
-            } else {
-              body = `Deployment failed for commit \`${context.sha}\`. Check [Workflow Run](${runUrl}) for details.`;
-            }
-
-            if (context.payload.pull_request) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                body
-              });
-            } else {
-              await github.rest.repos.createCommitComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                commit_sha: context.sha,
-                body
-              });
-            }
+      # sev1- Critical Severity, sev2 - High, sev3 - Medium, sev4 - Low, sev5 - Info
+      - name: Check the Outputs to Determine Whether to Fail
+        if: |
+          steps.run-code-analyzer.outputs.num-sev1-violations > 0 ||
+          steps.run-code-analyzer.outputs.num-sev2-violations > 0 ||
+          steps.run-code-analyzer.outputs.num-sev3-violations > 0
+        run: exit 1
